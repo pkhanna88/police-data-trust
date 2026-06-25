@@ -1,5 +1,6 @@
 import logging
 from functools import wraps
+from neomodel import db
 
 from backend.auth.jwt import min_role_required
 from backend.mixpanel.mix import track_to_mp
@@ -448,6 +449,34 @@ def get_all_complaints():
     if not results:
         abort(404, description="No complaints found")
     return ordered_jsonify(results), 200
+
+
+# Get complaint counts grouped by year
+@bp.route("/metrics/over-time", methods=["GET"])
+@jwt_required()
+@min_role_required(UserRole.PUBLIC)
+def get_complaints_over_time():
+    """
+    Powers the Complaints Over Time line graph on the Overview page.
+    """
+    query = """
+    MATCH (c:Complaint)
+    WHERE c.incident_date IS NOT NULL
+    RETURN substring(toString(c.incident_date), 0, 4) AS year,
+           count(c) AS complaint_count
+    ORDER BY year
+    """
+    try:
+        results, _ = db.cypher_query(query)
+    except Exception as e:
+        logging.error(f"Error fetching complaints over time: {e}")
+        abort(500, description="Failed to fetch complaint trends.")
+
+    data = [
+        {"year": row[0], "complaint_count": row[1]}
+        for row in results
+    ]
+    return ordered_jsonify(data), 200
 
 
 # Update a complaint record

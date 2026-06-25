@@ -46,6 +46,7 @@ test("Nav renders the Feedback link", () => {
 test("Nav renders navigation links", () => {
   const { unmount } = customRender()
   expect(screen.getByText("Home"))
+  expect(screen.getByText("Overview"))
   expect(screen.getByText("Data Explorer"))
   expect(screen.getByText("Community"))
   expect(screen.getByText("Collection"))

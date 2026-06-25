@@ -370,3 +370,8 @@ export type Unit = {
   most_reported_officers?: SearchResponse[]
   sources?: Source[]
 }
+
+export type ComplaintsOverTimePoint = {
+  year: string
+  complaint_count: number
+}
