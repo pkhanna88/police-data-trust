@@ -942,3 +942,27 @@ def test_create_complaint_with_multiple_allegations(
     expected_civ_ids = {f"{complaint.uid}-1", f"{complaint.uid}-2",
                         f"{complaint.uid}-3"}
     assert civ_ids_seen == expected_civ_ids
+
+
+def test_get_complaints_over_time(
+        client, db_session, access_token, example_complaints):
+    """Test the complaints-over-time metrics endpoint.
+    The example_complaints fixture seeds 3 complaints, all with an
+    incident_date in 2022, so the result should contain a single
+    year entry of "2022" with a count of 3.
+    """
+    res = client.get(
+        "/api/v1/complaints/metrics/over-time",
+        headers={"Authorization": "Bearer {0}".format(access_token)},
+    )
+
+    assert res.status_code == 200
+
+    # Result is a list of {year, complaint_count} objects
+    data = res.json
+    assert isinstance(data, list)
+
+    # All seeded complaints are from 2022
+    year_2022 = [row for row in data if row["year"] == "2022"]
+    assert len(year_2022) == 1
+    assert year_2022[0]["complaint_count"] == 3

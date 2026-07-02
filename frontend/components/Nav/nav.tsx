@@ -11,6 +11,7 @@ import styles from "./nav.module.css"
 export default function Nav() {
   const Links = [
     { text: "Home", href: "/" },
+    { text: "Overview", href: "/overview" },
     { text: "Data Explorer", href: "/data-explorer", disabled: true },
     { text: "Community", href: "/community", disabled: true },
     { text: "Collection", href: "/collection", disabled: true }

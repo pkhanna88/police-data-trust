@@ -36,6 +36,9 @@ const API_ROUTES = {
   },
   units: {
     profile: (slug: string) => `/units/${slug}`
+  },
+  complaints: {
+    metricsOverTime: "/complaints/metrics/over-time"
   }
 }
 
