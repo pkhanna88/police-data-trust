@@ -2,6 +2,7 @@ import logging
 
 from backend.database import db
 from backend.queries.text_search import (
+    officer_list_exact_match,
     officer_list_ranking,
     officer_lookup_params,
 )
@@ -294,9 +295,11 @@ class UnitQueries:
             "limit": limit,
         })
 
+        exact_match = officer_list_exact_match(params, "badges")
         if include_employment:
             ranking, order = officer_list_ranking(
-                params, "o, score, most_recent, earliest_date, latest_date")
+                params,
+                "o, score, most_recent, earliest_date, latest_date, badges")
             query = (
                 base_query
                 + """
@@ -311,6 +314,7 @@ class UnitQueries:
                     score,
                     employment,
                     head(employment) AS most_recent,
+                    [stint IN employment | stint.badge_number] AS badges,
                     reduce(min_date = null, stint IN employment |
                         CASE
                             WHEN min_date IS NULL THEN stint.earliest_date
@@ -342,7 +346,10 @@ class UnitQueries:
                         rank: most_recent.highest_rank,
                         status: most_recent.status,
                         type: most_recent.type
-                    } AS employment
+                    } AS employment,
+                    """
+                + exact_match
+                + """ AS exact_match
                 ORDER BY """
                 + order
                 + """, o.last_name ASC, o.first_name ASC
@@ -351,15 +358,17 @@ class UnitQueries:
                 """
             )
         else:
-            ranking, order = officer_list_ranking(params, "o, score")
+            ranking, order = officer_list_ranking(params, "o, score, badges")
             query = (
                 base_query
                 + """
-                WITH o, max(score) AS score
+                WITH o, max(score) AS score, collect(e.badge_number) AS badges
                 """
                 + ranking
                 + """
-                RETURN o
+                RETURN o, """
+                + exact_match
+                + """ AS exact_match
                 ORDER BY """
                 + order
                 + """, o.last_name ASC, o.first_name ASC

@@ -6,6 +6,7 @@ from backend.database.properties.datetime import DateNeo4jFormatProperty
 from backend.queries.text_search import (
     NAME_RANK_ORDER,
     build_prefix_query,
+    exact_match_cypher,
     name_rank_clauses,
     tokenize,
 )
@@ -268,12 +269,17 @@ class Agency(StructuredNode, HasCitations, JsonSerializable, SearchableMixin):
         source_uids: list[str] | None = None,
         count: bool = False,
         skip: int = 0,
-        limit: int = 25
+        limit: int = 25,
+        with_exact_match: bool = False,
     ):
         """
         Model-specific search for Agency.
         Decides which fulltext index to use and delegates to the
         shared _search() in the mixin.
+
+        With `with_exact_match`, returns (agency, exact_match) pairs, where
+        exact_match says whether every word of `query` is a whole word of
+        the agency's name (None without a query).
         """
 
         filters = filters or {}
@@ -338,17 +344,21 @@ class Agency(StructuredNode, HasCitations, JsonSerializable, SearchableMixin):
             return rows[0][0] if rows else 0
 
         order = "score DESC, n.uid ASC"
+        exact_match = "null"
         if query:
             cypher_parts.append(name_rank_clauses("n", "n, score"))
             order = f"{NAME_RANK_ORDER}, n.uid ASC"
+            exact_match = exact_match_cypher()
         cypher_parts.append(f"""
-        RETURN n
+        RETURN n, {exact_match} AS exact_match
         ORDER BY {order}
         SKIP $skip
         LIMIT $limit
         """)
         params.update({"skip": skip, "limit": limit})
         rows, _ = db.cypher_query("\n".join(cypher_parts), params)
+        if with_exact_match:
+            return [(row[0], row[1]) for row in rows]
         return [row[0] for row in rows]
 
     @classmethod

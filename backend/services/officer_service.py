@@ -215,6 +215,7 @@ class OfficerService:
             skip=params.skip,
             limit=params.limit,
             inflate=not params.searchResult,
+            with_exact_match=bool(params.searchResult),
         )
 
         if params.searchResult:

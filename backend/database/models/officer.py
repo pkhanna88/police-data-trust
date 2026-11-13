@@ -9,6 +9,7 @@ from backend.queries.text_search import (
     build_all_words_query,
     build_exact_query,
     build_prefix_query,
+    exact_match_cypher,
     name_rank_clauses,
     tokenize,
 )
@@ -207,7 +208,8 @@ class Officer(StructuredNode, HasCitations, JsonSerializable):
         skip: int = 0,
         limit: int = 25,
         count: bool = False,
-        inflate: bool = True
+        inflate: bool = True,
+        with_exact_match: bool = False,
     ):
         """
         Search for officers based on filters.
@@ -219,6 +221,9 @@ class Officer(StructuredNode, HasCitations, JsonSerializable):
             filters (dict): A dictionary of filters to apply.
             skip (int): Number of records to skip for pagination.
             limit (int): Number of records to return.
+            with_exact_match (bool): Return (officer, exact_match) pairs,
+                where exact_match says whether every word of `name` is a
+                whole word of the officer's name (None without a name).
             """
 
         # convert date strings to date objects
@@ -349,14 +354,14 @@ class Officer(StructuredNode, HasCitations, JsonSerializable):
                     "\nWITH DISTINCT o, score"
                     + name_rank_clauses("o", "o, score")
                     + f"""
-                RETURN o
+                RETURN o, {exact_match_cypher()} AS exact_match
                 ORDER BY {NAME_RANK_ORDER}, toLower(o.last_name),
                     toLower(o.first_name), o.uid
                 SKIP $skip LIMIT $limit
                 """)
             else:
                 cypher_query += """
-                RETURN DISTINCT o SKIP $skip LIMIT $limit
+                RETURN DISTINCT o, null AS exact_match SKIP $skip LIMIT $limit
                 """
 
             logging.debug("Cypher query:\n%s", cypher_query)
@@ -364,4 +369,6 @@ class Officer(StructuredNode, HasCitations, JsonSerializable):
 
             rows, _ = db.cypher_query(cypher_query, params,
                                       resolve_objects=inflate)
+            if with_exact_match:
+                return [(row[0], row[1]) for row in rows]
             return [row[0] for row in rows]

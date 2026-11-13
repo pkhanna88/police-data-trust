@@ -101,7 +101,8 @@ def name_rank_clauses(
         name) the search covers, so "Anthony M Rivera" puts Anthony Rivera
         ahead of Anthony M Angelos.
 
-    Sort with NAME_RANK_ORDER.
+    Sort with NAME_RANK_ORDER, and flag exact matches with
+    exact_match_cypher().
     """
     first, middle, last, suffix, name = (
         _words_cypher(f"{node}.{prop}")
@@ -131,6 +132,17 @@ def name_rank_clauses(
     """
 
 
+def exact_match_cypher(words: str = "$search_words") -> str:
+    """
+    Cypher for whether a name is an exact match for the search `words`:
+    each of them is a whole word of the name, in any order. Exact matches
+    sort ahead of the rest under NAME_RANK_ORDER, so a page whose first
+    result is not exact has no exact matches at all. Needs the variables
+    from name_rank_clauses().
+    """
+    return f"(whole_matches = size({words}))"
+
+
 def officer_lookup_params(term: str | None, strategy: str) -> dict:
     """
     Query parameters for an officer-list search box whose text was classified
@@ -146,6 +158,7 @@ def officer_lookup_params(term: str | None, strategy: str) -> dict:
         params["name_query"] = build_prefix_query(term)
     if strategy in ("badge", "ambiguous"):
         params["badge_query"] = build_exact_query(term)
+        params["badge_term"] = " ".join(term.split()).lower()
     return params
 
 
@@ -155,3 +168,20 @@ def officer_list_ranking(params: dict, carry: str) -> tuple[str, str]:
     if params.get("search_words"):
         return name_rank_clauses("o", carry), NAME_RANK_ORDER
     return "", "score DESC"
+
+
+def officer_list_exact_match(params: dict, badges: str) -> str:
+    """
+    Cypher for whether an officer-list row exactly matches the search box:
+    every searched word is a whole word of the officer's name, or the
+    searched badge number is one of `badges` (a Cypher list). null when
+    nothing was searched. Comes after the officer_list_ranking() clauses.
+    """
+    checks = []
+    if params.get("search_words"):
+        checks.append(exact_match_cypher())
+    if params.get("badge_term"):
+        checks.append(
+            f"any(badge IN {badges} WHERE "
+            "toLower(trim(coalesce(toString(badge), ''))) = $badge_term)")
+    return " OR ".join(checks) if checks else "null"

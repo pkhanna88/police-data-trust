@@ -147,6 +147,106 @@ def test_agency_and_unit_officer_lists_rank_direct_matches_first(
         assert set(names[2:]) == {"Anthony Smith", "Jose Rivera"}
 
 
+# ---- exact matches are flagged -------------------------------------------
+
+def exact_flags(res) -> dict:
+    """Each result's name -> its exact_match flag."""
+    names = result_names(res)
+    return {
+        name: item["exact_match"]
+        for name, item in zip(names, res.json["results"])
+    }
+
+
+@pytest.mark.parametrize("path, params", [
+    ("/api/v1/search", {}),
+    ("/api/v1/officers", {"searchResult": "true"}),
+])
+def test_search_results_flag_exact_matches(
+        client, access_token, named_officers, path, params):
+    flags = exact_flags(get(
+        client, access_token, path, term="Rivera Anthony", **params))
+    # Exact: every word is a whole word of the name, in any order.
+    assert flags == {
+        "Anthony Rivera": True,
+        "Marcus Anthony Rivera": True,
+        "Anthony Smith": False,
+        "Jose Rivera": False,
+    }
+
+    # Word starts alone are partial matches.
+    flags = exact_flags(get(
+        client, access_token, path, term="Ant Riv", **params))
+    assert flags and not any(flags.values())
+
+
+def test_officer_search_without_a_name_has_no_exact_flag(
+        client, access_token, named_officers):
+    flags = exact_flags(get(
+        client, access_token, "/api/v1/officers",
+        rank="Detective", searchResult="true"))
+
+    assert flags == {"Anthony Rivera": None}
+
+
+def test_agency_search_flags_exact_matches(client, access_token):
+    for name in ("Harris County Constable", "Fort Bend County Constable"):
+        Agency(name=name, hq_state="TX",
+               jurisdiction=Jurisdiction.MUNICIPAL.value).save()
+    refresh_fulltext_indexes()
+
+    flags = exact_flags(get(
+        client, access_token, "/api/v1/agencies",
+        term="Constable Harris", searchResult="true"))
+
+    assert flags == {
+        "Harris County Constable": True,
+        "Fort Bend County Constable": False,
+    }
+
+
+@pytest.mark.parametrize("include", [None, "employment"])
+def test_officer_lists_flag_exact_matches(
+        client, access_token, named_officers, example_agency, example_unit,
+        include):
+    extra = {"include": include} if include else {}
+    for path in (f"/api/v1/agencies/{example_agency.uid}/officers",
+                 f"/api/v1/units/{example_unit.uid}/officers"):
+        flags = exact_flags(get(
+            client, access_token, path, term="Rivera Anthony", **extra))
+        assert flags == {
+            "Anthony Rivera": True,
+            "Marcus Anthony Rivera": True,
+            "Anthony Smith": False,
+            "Jose Rivera": False,
+        }
+
+        # Nothing searched: there is nothing to match exactly.
+        flags = exact_flags(get(client, access_token, path, **extra))
+        assert len(flags) == len(PEOPLE)
+        assert set(flags.values()) == {None}
+
+
+def test_officer_lists_flag_exact_badge_numbers(
+        client, access_token, example_agency, example_unit):
+    for first, last, badge in (("Dana", "Cole", "4321"),
+                               ("Eli", "Park", "4321-B")):
+        officer = Officer(first_name=first, last_name=last).save()
+        employment = Employment(
+            highest_rank="Police Officer", badge_number=badge,
+            earliest_date=date(2020, 1, 1)).save()
+        employment.unit.connect(example_unit)
+        employment.officer.connect(officer)
+    refresh_fulltext_indexes()
+
+    for path in (f"/api/v1/agencies/{example_agency.uid}/officers",
+                 f"/api/v1/units/{example_unit.uid}/officers"):
+        for extra in ({}, {"include": "employment"}):
+            flags = exact_flags(get(
+                client, access_token, path, term="4321", **extra))
+            assert flags == {"Dana Cole": True, "Eli Park": False}
+
+
 # ---- search text never breaks a query -----------------------------------
 
 @pytest.mark.parametrize(

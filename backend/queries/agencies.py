@@ -2,6 +2,7 @@ import logging
 
 from neomodel import db
 from backend.queries.text_search import (
+    officer_list_exact_match,
     officer_list_ranking,
     officer_lookup_params,
 )
@@ -420,9 +421,11 @@ class AgencyQueries:
             "limit": limit,
         })
 
+        exact_match = officer_list_exact_match(params, "badges")
         if include_employment:
             ranking, order = officer_list_ranking(
-                params, "o, score, most_recent, earliest_date, latest_date")
+                params,
+                "o, score, most_recent, earliest_date, latest_date, badges")
             query = (
                 base_query
                 + """
@@ -439,6 +442,7 @@ class AgencyQueries:
                     score,
                     rows,
                     head(rows) AS most_recent,
+                    [row IN rows | row.employment.badge_number] AS badges,
                     reduce(min_date = null, row IN rows |
                         CASE
                             WHEN min_date IS NULL
@@ -477,7 +481,10 @@ class AgencyQueries:
                             uid: most_recent.unit.uid,
                             name: most_recent.unit.name
                         }
-                    } AS employment
+                    } AS employment,
+                    """
+                + exact_match
+                + """ AS exact_match
                 ORDER BY """
                 + order
                 + """, o.last_name ASC, o.first_name ASC
@@ -486,15 +493,17 @@ class AgencyQueries:
                 """
             )
         else:
-            ranking, order = officer_list_ranking(params, "o, score")
+            ranking, order = officer_list_ranking(params, "o, score, badges")
             query = (
                 base_query
                 + """
-                WITH o, max(score) AS score
+                WITH o, max(score) AS score, collect(e.badge_number) AS badges
                 """
                 + ranking
                 + """
-                RETURN o
+                RETURN o, """
+                + exact_match
+                + """ AS exact_match
                 ORDER BY """
                 + order
                 + """, o.last_name ASC, o.first_name ASC

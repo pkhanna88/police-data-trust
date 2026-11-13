@@ -101,6 +101,9 @@ class SearchResult(BaseModel):
     source: str
     last_updated: datetime | None
     href: str
+    # Whether the result exactly matches the search text: every searched
+    # word is a whole word of its name. None when no text was searched.
+    exact_match: Optional[bool] = None
 
     @field_validator("last_updated", mode="before")
     @classmethod
@@ -154,7 +157,9 @@ def fetch_details(uids: List[str], content_type: str) -> Dict[str, dict]:
     return {uid: row or {} for uid, row in rows}
 
 
-def build_agency_result(node, details_row: dict) -> SearchResult:
+def build_agency_result(
+        node, details_row: dict,
+        exact_match: bool | None = None) -> SearchResult:
     agency = node if isinstance(node, Agency) else Agency.inflate(node)
     uid = agency.uid
 
@@ -179,10 +184,13 @@ def build_agency_result(node, details_row: dict) -> SearchResult:
         source=details_row.get("source") or "Unknown Source",
         last_updated=details_row.get("last_updated"),
         href=f"/api/v1/agencies/{uid}",
+        exact_match=exact_match,
     )
 
 
-def build_unit_result(node, details_row: dict) -> SearchResult:
+def build_unit_result(
+        node, details_row: dict,
+        exact_match: bool | None = None) -> SearchResult:
     unit = node if isinstance(node, Unit) else Unit.inflate(node)
     uid = unit.uid
 
@@ -202,10 +210,13 @@ def build_unit_result(node, details_row: dict) -> SearchResult:
         source=details_row.get("source") or "Unknown Source",
         last_updated=details_row.get("last_updated"),
         href=f"/api/v1/units/{uid}",
+        exact_match=exact_match,
     )
 
 
-def build_officer_result(node, details_row: dict) -> SearchResult:
+def build_officer_result(
+        node, details_row: dict,
+        exact_match: bool | None = None) -> SearchResult:
     officer = node if isinstance(node, Officer) else Officer.inflate(node)
     uid = officer.uid
 
@@ -242,4 +253,5 @@ def build_officer_result(node, details_row: dict) -> SearchResult:
         source=details_row.get("source") or "Unknown Source",
         last_updated=details_row.get("last_updated"),
         href=f"/api/v1/officers/{uid}",
+        exact_match=exact_match,
     )

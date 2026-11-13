@@ -3,6 +3,7 @@ from backend.queries.filter_resolver import FilterResolver
 from backend.queries.text_search import (
     NAME_RANK_ORDER,
     build_prefix_query,
+    exact_match_cypher,
     name_rank_clauses,
     tokenize,
 )
@@ -74,7 +75,7 @@ SEARCH_RESULTS_QUERY = (
     SEARCH_BASE_QUERY
     + name_rank_clauses("node", "node, score", words="$query_terms")
     + f"""
-RETURN node, score
+RETURN node, score, {exact_match_cypher("$query_terms")} AS exact_match
 ORDER BY {NAME_RANK_ORDER}, node.uid ASC
 SKIP $per_page * ($page - 1)
 LIMIT $per_page
